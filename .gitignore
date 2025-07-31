@@ -1,6 +1,8 @@
 # zig files
 .zig-cache/
 zig-out/
+compile_commands.json
+.idea/
 
 # Prerequisites
 *.d

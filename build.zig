@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "main",
+        .name = "zig-compiled",
         .target = target,
         .optimize = optimize,
     });
@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
 
     const cpp_files = getSrcFiles(
         b.allocator,
-        "src/",
+        "src/cpp",
         "cpp",
     ) catch |err|
         @panic(@errorName(err));
