@@ -70,7 +70,7 @@ zig build cmds
 ## For use with Jetbrains IDEs (eg: Clion)
 ### Prerequisites
 In the IDE, install the [zigbrains](https://plugins.jetbrains.com/plugin/22456-zigbrains) extension. Then add your build toolchain in the extensions settings. Once done, open the template in the ide, and **select compilation database project** in the popup.  
-**Note:** the IDE **will not** see your compile_commands.json if you do not select this option properly.
+**Note:** the IDE **will not** see your compile_commands.json if you do not select this option properly. This will result in issues. The IDE will also not give warnings based off compile_commands.json 
 
 ### Setting up the project
 Once open, no build configuration will be provided by default. This  means in order to run your project, either regularly or with the debugger, you must first add a run configuration. Luckily this is fairly simple.
