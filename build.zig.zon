@@ -1,0 +1,22 @@
+.{
+    .name = .zig_compiled,
+
+    .version = "0.0.0",
+
+    .fingerprint = 0x3b754198ed83c33d, // Changing this has security and trust implications.
+
+    .minimum_zig_version = "0.14.0",
+
+    .dependencies = .{
+        .compile_commands = .{
+            .url = "https://github.com/the-argus/zig-compile-commands/archive/11cc2917816875aae4890e0a899f810e33570d70.tar.gz",
+            .hash = "N-V-__8AAFLOAACuuPPvb9E05PlcLiPoxsMOTRiP4K1hSaoB",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "include",
+    },
+}
