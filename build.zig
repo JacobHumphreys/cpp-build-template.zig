@@ -62,15 +62,15 @@ pub fn build(b: *std.Build) void {
     debug.addIncludePath(b.path("include"));
 
     //Build and Link zig -> c code --------------------------------
-    const lib = b.addSharedLibrary(.{
-        .name = "mathtest",
-        .root_source_file = b.path("src/zig/mathtest.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    lib.linkLibC();
-    exe.linkLibrary(lib);
-    debug.linkLibrary(lib);
+    //const lib = b.addSharedLibrary(.{
+    //    .name = "mathtest",
+    //    .root_source_file = b.path("src/zig/mathtest.zig"),
+    //    .target = target,
+    //    .optimize = optimize,
+    //});
+    //lib.linkLibC();
+    //exe.linkLibrary(lib);
+    //debug.linkLibrary(lib);
     //---------------------------------------------
 
     b.installArtifact(exe);
@@ -167,7 +167,7 @@ const additional_flags: []const []const u8 = &.{"-std=c++20"};
 const debug_flags = runtime_check_flags ++ warning_flags;
 
 const runtime_check_flags: []const []const u8 = &.{
-    "-fsanitize=address,array-bounds,null,alignment,unreachable,leak", // leak is linux/macos only
+    "-fsanitize=array-bounds,null,alignment,unreachable,address,leak", // asan and leak are linux/macos only in 0.14.1
     "-fstack-protector-strong",
     "-fno-omit-frame-pointer",
 };
@@ -190,8 +190,7 @@ const warning_flags: []const []const u8 = &.{
     "-Wmissing-declarations",
     "-Wunused",
     "-Wundef",
-    "-Werror", //on windows with zig 0.14.1 this causes an error on debug and release safe.
-    //a fix has been merged but may not be avaliable
+    "-Werror",
 };
 
 fn getBuildFlags(
@@ -203,14 +202,16 @@ fn getBuildFlags(
 
     if (optimize == .Debug) {
         cpp_flags = additional_flags ++ debug_flags;
+        if (exe.rootModuleTarget().os.tag == .windows) return cpp_flags;
+
         exe.addLibraryPath(.{ .cwd_relative = try getClangPath(alloc, exe.rootModuleTarget()) });
-        const asan_lib = if (exe.rootModuleTarget().os.tag == .windows)
-            "clang_rt.asan_dynamic-x86_64"
+        const asan_lib = if (exe.rootModuleTarget().os.tag == .windows) 
+            "clang_rt.asan_dynamic-x86_64" // Won't be triggered in current version
         else
             "clang_rt.asan-x86_64";
 
         exe.linkSystemLibrary(asan_lib);
-        exe.linkSystemLibrary("clang_rt.ubsan_standalone-x86_64");
+        //exe.linkSystemLibrary("clang_rt.ubsan_standalone_cxx-x86_64");
     } else {
         cpp_flags = additional_flags;
     }

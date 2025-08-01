@@ -122,7 +122,7 @@ Before
 ```zig
 #168
 const runtime_check_flags: []const []const u8 = &.{
-    "-fsanitize=address,array-bounds,null,alignment,unreachable,leak", // leak is linux/macos only
+    "-fsanitize=array-bounds,null,alignment,unreachable,address,leak", // asan and leak are linux/macos only in 0.14.1
     "-fstack-protector-strong",
     "-fno-omit-frame-pointer",
 };
@@ -133,7 +133,7 @@ After
 ```zig
 #168
 const runtime_check_flags: []const []const u8 = &.{
-    "-fsanitize=address,array-bounds,null,alignment,unreachable", //leak", // leak is linux/macos only
+    "-fsanitize=array-bounds,null,alignment,unreachable,address", //leak", // asan and leak are linux/macos only in 0.14.1
     "-fstack-protector-strong",
     "-fno-omit-frame-pointer",
 };
@@ -143,4 +143,6 @@ const runtime_check_flags: []const []const u8 = &.{
 After making this change building the project should result in success, but you will lose leak-detection.
 
 **Special Note for Zig 0.14**
-In the 0.14 zig release for windows, there is a bug for which a [fix has been merged](https://github.com/ziglang/zig/pull/23140), but in my testing may not be entirely fixed. In order to avoid running into this bug, disable *-Werror* in *warning_flags*
+In the 0.14 zig release for windows, there is ~~a bug for which a [fix has been merged](https://github.com/ziglang/zig/pull/23140)~~ a bug with [asan](https://github.com/ziglang/zig/issues/24643).  
+
+In order to avoid running into this bug, disable either the *-Werror* in *warning_flags* or the *address* flag in *runtime_check_flags* (reccomended for general use).
