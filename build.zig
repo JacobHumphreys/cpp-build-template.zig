@@ -62,15 +62,15 @@ pub fn build(b: *std.Build) void {
     debug.addIncludePath(b.path("include"));
 
     //Build and Link zig -> c code --------------------------------
-    //const lib = b.addSharedLibrary(.{
-    //    .name = "mathtest",
-    //    .root_source_file = b.path("src/zig/mathtest.zig"),
-    //    .target = target,
-    //    .optimize = optimize,
-    //});
-    //lib.linkLibC();
-    //exe.linkLibrary(lib);
-    //debug.linkLibrary(lib);
+    const lib = b.addSharedLibrary(.{
+        .name = "mathtest",
+        .root_source_file = b.path("src/zig/mathtest.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    lib.linkLibC();
+    exe.linkLibrary(lib);
+    debug.linkLibrary(lib);
     //---------------------------------------------
 
     b.installArtifact(exe);
@@ -205,7 +205,7 @@ fn getBuildFlags(
         if (exe.rootModuleTarget().os.tag == .windows) return cpp_flags;
 
         exe.addLibraryPath(.{ .cwd_relative = try getClangPath(alloc, exe.rootModuleTarget()) });
-        const asan_lib = if (exe.rootModuleTarget().os.tag == .windows) 
+        const asan_lib = if (exe.rootModuleTarget().os.tag == .windows)
             "clang_rt.asan_dynamic-x86_64" // Won't be triggered in current version
         else
             "clang_rt.asan-x86_64";
