@@ -167,7 +167,7 @@ const additional_flags: []const []const u8 = &.{"-std=c++20"};
 const debug_flags = runtime_check_flags ++ warning_flags;
 
 const runtime_check_flags: []const []const u8 = &.{
-    "-fsanitize=address,array-bounds,null,alignment,unreachable", //,leak", // leak is linux/macos only
+    "-fsanitize=address,array-bounds,null,alignment,unreachable,leak", // leak is linux/macos only
     "-fstack-protector-strong",
     "-fno-omit-frame-pointer",
 };
