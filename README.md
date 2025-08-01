@@ -4,7 +4,8 @@ This is a [zig build system](https://ziglang.org/) template for c/cpp. It includ
 for your c/cpp project intended to encourage safer code.
 
 ### features
-By default, the build.Zig is configured to recursively search the src/cpp directory for .cpp files and compiles them using the following warnings and sanitizers.
+By default, the build.Zig is configured to recursively search the src/cpp directory for .cpp files and compiles them using the following warnings and sanitizers.  
+**See windows section for notes on windows support.**
 
 <details>
 <summary>⚠️ <strong>Warnings</strong></summary>
@@ -48,6 +49,7 @@ The template's `build.zig` uses a Clang command to locate UBSan and ASan librari
 
 </details>
 
+---
 ## Project structure
 ```
 ./
@@ -58,6 +60,8 @@ The template's `build.zig` uses a Clang command to locate UBSan and ASan librari
   build.zig
   build.zig.zon
 ```
+
+---
 ## For use with language servers
 The template has a dependency on [the-argus/zig-compile-commands](https://github.com/the-argus/zig-compile-commands) for automating the creation of a **compile_commands.json** because the zig build system has no native way to do this. This file hints to language servers and IDEs how to analyze your project.
 
@@ -67,6 +71,7 @@ In order to use it, run the following build step after configuring the project t
 zig build cmds
 ```
 
+---
 ## For use with Jetbrains IDEs (eg: Clion)
 ### Prerequisites
 In the IDE, install the [zigbrains](https://plugins.jetbrains.com/plugin/22456-zigbrains) extension. Then add your build toolchain in the extensions settings. Once done, open the template in the ide, and **select compilation database project** in the popup.  
@@ -91,3 +96,51 @@ Please configure it in [Settings | Languages & Frameworks | Zig]
 ```
 
 You can fix it by going to settings -> Languages & Frameworks -> Zig then selecting the toolchain installed on your system.
+
+---
+## Windows
+For windows, both setup and use are complicated because of inconsistant support of various sanitizers and bugs within the current version of zig. 
+
+### Setup
+---
+#### Installing Clang
+Just like on Linux and Mac, you must install clang in order to use supported sanitizers. This is because **the MSVC sanitizers are not compatible with zig**.
+
+This can be done with the following command in powershell
+```ps1
+winget install LLVM.LLVM
+```
+
+Once LLVM is installed you can use clang by adding the following to the *Path* environment variable.
+- C:\Program Files\LLVM\bin
+- C:\Program Files\LLVM\lib\clang\20\ #or whatever version you have installed
+---
+#### Configuring build.zig
+On Windows, the leak sanitizer is currently unsupported. So in order for Zig to build properly, **you must remove the leak tag from the *runtime_check_flags* constant in build.zig
+
+Before
+```zig
+#168
+const runtime_check_flags: []const []const u8 = &.{
+    "-fsanitize=address,array-bounds,null,alignment,unreachable,leak", // leak is linux/macos only
+    "-fstack-protector-strong",
+    "-fno-omit-frame-pointer",
+};
+#174
+```
+
+After
+```zig
+#168
+const runtime_check_flags: []const []const u8 = &.{
+    "-fsanitize=address,array-bounds,null,alignment,unreachable", //leak", // leak is linux/macos only
+    "-fstack-protector-strong",
+    "-fno-omit-frame-pointer",
+};
+#174
+```
+
+After making this change building the project should result in success, but you will lose leak-detection.
+
+**Special Note for Zig 0.14**
+In the 0.14 zig release for windows, there is a bug for which a (fix has been merged)[https://github.com/ziglang/zig/pull/23140], but in my testing may not be entirely fixed. 
