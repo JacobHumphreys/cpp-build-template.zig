@@ -58,8 +58,8 @@ pub fn build(b: *std.Build) void {
     exe.linkLibCpp();
     debug.linkLibCpp();
 
-    exe.addIncludePath(b.path("include/"));
-    debug.addIncludePath(b.path("include/"));
+    exe.addIncludePath(b.path("include"));
+    debug.addIncludePath(b.path("include"));
 
     //Build and Link zig -> c code --------------------------------
     const lib = b.addSharedLibrary(.{
@@ -105,7 +105,7 @@ pub fn build(b: *std.Build) void {
     );
 }
 
-pub fn getSrcFiles(alloc: Allocator, dir_path: []const u8, extension: []const u8) ![]const []const u8 {
+pub fn getSrcFiles(alloc: std.mem.Allocator, dir_path: []const u8, extension: []const u8) ![]const []const u8 {
     const src = try fs.cwd().openDir(dir_path, .{ .iterate = true });
 
     var file_list = ArrayList([]const u8).empty;
@@ -133,34 +133,33 @@ pub fn getSrcFiles(alloc: Allocator, dir_path: []const u8, extension: []const u8
     return try file_list.toOwnedSlice(alloc);
 }
 
-fn getClangPath(alloc: Allocator) ![]const u8 {
-    const Child = std.process.Child;
-    var child_proc = Child.init(&.{
+fn getClangPath(alloc: std.mem.Allocator, target: std.Target) ![]const u8 {
+    const asan_lib = if (target.os.tag == .windows)
+        "clang_rt.asan_dynamic-x86_64.dll"
+    else
+        "libclang_rt.asan-x86_64.so";
+    var child_proc = std.process.Child.init(&.{
         "clang",
-        "-print-file-name=libclang_rt.asan-x86_64.so",
+        try std.mem.concat(alloc, u8, &.{ "-print-file-name=", asan_lib }),
     }, alloc);
     child_proc.stdout_behavior = .Pipe;
-
-    const read_buffer = try alloc.alloc(u8, 512);
-    defer alloc.free(read_buffer);
 
     try child_proc.spawn();
 
     const child_std_out = child_proc.stdout.?;
 
-    var output_size = try child_std_out.readAll(read_buffer);
+    var output = try child_std_out.reader().readAllAlloc(alloc, 512);
 
     _ = try child_proc.wait();
 
-    if (mem.lastIndexOf(u8, read_buffer[0..output_size], "/")) |last_path_sep| {
-        output_size = last_path_sep + 1;
+    const file_delim = if (target.os.tag == .windows) "\\" else "/";
+
+    if (mem.lastIndexOf(u8, output, file_delim)) |last_path_sep| {
+        output.len = last_path_sep + 1;
     } else {
         @panic("Path Not Formatted Correctly");
     }
-
-    const output_buffer = try alloc.alloc(u8, output_size);
-    @memcpy(output_buffer, read_buffer[0..output_size]);
-    return output_buffer;
+    return output;
 }
 
 const additional_flags: []const []const u8 = &.{"-std=c++20"};
@@ -168,7 +167,7 @@ const additional_flags: []const []const u8 = &.{"-std=c++20"};
 const debug_flags = runtime_check_flags ++ warning_flags;
 
 const runtime_check_flags: []const []const u8 = &.{
-    "-fsanitize=address,array-bounds,null,alignment,leak,unreachable",
+    "-fsanitize=address,array-bounds,null,alignment,unreachable", //,leak", // leak is linux/macos only
     "-fstack-protector-strong",
     "-fno-omit-frame-pointer",
 };
@@ -191,7 +190,8 @@ const warning_flags: []const []const u8 = &.{
     "-Wmissing-declarations",
     "-Wunused",
     "-Wundef",
-    "-Werror",
+    "-Werror", //on windows with zig 0.14.1 this causes an error on debug and release safe.
+    //a fix has been merged but may not be avaliable
 };
 
 fn getBuildFlags(
@@ -201,10 +201,15 @@ fn getBuildFlags(
 ) ![]const []const u8 {
     var cpp_flags: []const []const u8 = undefined;
 
-    if (optimize == .Debug or optimize == .ReleaseSafe) {
+    if (optimize == .Debug) {
         cpp_flags = additional_flags ++ debug_flags;
-        exe.addLibraryPath(.{ .cwd_relative = try getClangPath(alloc) });
-        exe.linkSystemLibrary("clang_rt.asan-x86_64");
+        exe.addLibraryPath(.{ .cwd_relative = try getClangPath(alloc, exe.rootModuleTarget()) });
+        const asan_lib = if (exe.rootModuleTarget().os.tag == .windows)
+            "clang_rt.asan_dynamic-x86_64"
+        else
+            "clang_rt.asan-x86_64";
+
+        exe.linkSystemLibrary(asan_lib);
         exe.linkSystemLibrary("clang_rt.ubsan_standalone-x86_64");
     } else {
         cpp_flags = additional_flags;
