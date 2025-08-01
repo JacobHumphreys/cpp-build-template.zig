@@ -47,7 +47,7 @@ By default, the build.Zig is configured to recursively search the src/cpp direct
 </details>
 
 Because Zig does not natively package sanitizers such as UBSan and ASan, **Clang is required in addition to Zig to build this project**.  
-The template's `build.zig` uses a Clang command to locate UBSan and ASan libraries for linking in `ReleaseSafe` and `Debug` modes.
+The template's `build.zig` uses a Clang command to locate UBSan and ASan libraries for linking in `Debug` mode.
 
 ---
 ## Project structure
