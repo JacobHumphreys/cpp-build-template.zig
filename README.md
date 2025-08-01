@@ -143,4 +143,4 @@ const runtime_check_flags: []const []const u8 = &.{
 After making this change building the project should result in success, but you will lose leak-detection.
 
 **Special Note for Zig 0.14**
-In the 0.14 zig release for windows, there is a bug for which a (fix has been merged)[https://github.com/ziglang/zig/pull/23140], but in my testing may not be entirely fixed. 
+In the 0.14 zig release for windows, there is a bug for which a [fix has been merged](https://github.com/ziglang/zig/pull/23140), but in my testing may not be entirely fixed. In order to avoid running into this bug, disable *-Werror* in *warning_flags*
