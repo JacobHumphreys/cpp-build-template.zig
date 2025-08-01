@@ -74,7 +74,6 @@ pub fn build(b: *std.Build) void {
     //---------------------------------------------
 
     b.installArtifact(exe);
-    b.installArtifact(debug);
     const exe_run = b.addRunArtifact(exe);
     const debug_run = b.addRunArtifact(debug);
 
@@ -89,7 +88,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&exe_run.step);
 
     const debug_step = b.step("debug", "runs the applicaiton without any warning or san flags");
-    debug_step.dependOn(&debug_run.step);
+    debug_step.dependOn(&b.addInstallArtifact(debug, .{}).step);
 
     var targets = ArrayList(*std.Build.Step.Compile).empty;
     defer targets.deinit(b.allocator);
