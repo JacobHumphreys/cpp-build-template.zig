@@ -48,3 +48,6 @@ compile_commands.json
 
 # debug information files
 *.dwo
+
+# nix flake files
+flake.lock
