@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
     const cpp_files = getSrcFiles(
         b.allocator,
         "src/cpp",
-        "cpp",
+        .cpp,
     ) catch |err|
         @panic(@errorName(err));
 
@@ -62,15 +62,35 @@ pub fn build(b: *std.Build) void {
     debug.addIncludePath(b.path("include"));
 
     //Build and Link zig -> c code --------------------------------
-    const lib = b.addSharedLibrary(.{
+    const zig_lib = b.addSharedLibrary(.{
         .name = "mathtest",
         .root_source_file = b.path("src/zig/mathtest.zig"),
         .target = target,
         .optimize = optimize,
     });
-    lib.linkLibC();
-    exe.linkLibrary(lib);
-    debug.linkLibrary(lib);
+    zig_lib.linkLibC();
+    zig_lib.addIncludePath(b.path("include/"));
+    exe.linkLibrary(zig_lib);
+    debug.linkLibrary(zig_lib);
+    //---------------------------------------------
+
+    //Build and Link static c library --------------------------------
+
+    var static_lib = b.addStaticLibrary(.{
+        .name = "example_static_lib",
+        .optimize = optimize,
+        .target = target,
+    });
+    static_lib.addCSourceFiles(.{
+        .files = getSrcFiles(b.allocator, "./lib/example-static-lib/", .c) catch |err| @panic(@errorName(err)),
+        .language = .c,
+    });
+
+    static_lib.linkLibC();
+    exe.linkLibrary(static_lib);
+    debug.linkLibrary(static_lib);
+    zig_lib.linkLibrary(static_lib);
+
     //---------------------------------------------
 
     b.installArtifact(exe);
@@ -104,11 +124,16 @@ pub fn build(b: *std.Build) void {
     );
 }
 
-pub fn getSrcFiles(alloc: std.mem.Allocator, dir_path: []const u8, extension: []const u8) ![]const []const u8 {
+pub fn getSrcFiles(alloc: std.mem.Allocator, dir_path: []const u8, extension_type: enum { c, cpp }) ![]const []const u8 {
     const src = try fs.cwd().openDir(dir_path, .{ .iterate = true });
 
     var file_list = ArrayList([]const u8).empty;
     errdefer file_list.deinit(alloc);
+
+    const extension = switch (extension_type) {
+        .c => "c",
+        .cpp => "cpp",
+    };
 
     var src_iterator = src.iterate();
     while (try src_iterator.next()) |entry| {
@@ -123,7 +148,7 @@ pub fn getSrcFiles(alloc: std.mem.Allocator, dir_path: []const u8, extension: []
             },
             .directory => {
                 const path = try fs.path.join(alloc, &.{ dir_path, entry.name });
-                try file_list.appendSlice(alloc, try getSrcFiles(alloc, path, extension));
+                try file_list.appendSlice(alloc, try getSrcFiles(alloc, path, extension_type));
             },
             else => continue,
         }

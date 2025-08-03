@@ -1,5 +1,7 @@
 #pragma once
 
+#include "example-static-lib.h"
+#include <cstdint>
 extern "C" {
 typedef struct Vec2 {
     int x, y;
@@ -9,7 +11,9 @@ typedef struct Vec2 {
 
 Vec2 Vec2_add(Vec2 first, Vec2 second);
 
-int *testAlloc();
+int* testAlloc();
+
+uint32_t useCLib(ExampleStaticStruct ess);
 }
 
 inline Vec2 Vec2::add(Vec2 v2) const {
