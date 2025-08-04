@@ -46,17 +46,37 @@ By default, the build.Zig is configured to recursively search the src/cpp direct
 
 </details>
 
-Because Zig does not natively package sanitizers such as UBSan and ASan, **Clang is required in addition to Zig to build this project**.  
-The template's `build.zig` uses a Clang command to locate UBSan and ASan libraries for linking in `Debug` mode.
+Because Zig does not natively package certain sanitizers such ASan, **Clang is required in addition to Zig to build this project**.  
+
+The template's `build.zig` uses a Clang command to locate ASan libraries for linking in `Debug` mode.
+
+### Setup
+To use compile this template after cloning it, you must first build the dynamic and static libraries it relies on. This is simple as all you need to do is run the following command.  
+
+```
+zig build -Dbuild-static -Dbuild-dynamic
+```
+**Note:** you can use any regular build steps with these flags (eg: zig build run)
+
+After they are built you can avoid having to rebuild them by moving them to the ./lib/ directory. You can do this with the following.
+```
+mv ./zig-out/lib/libexample_* ./lib/
+```
 
 ---
 ## Project structure
 ```
 ./
-  ./include/ #place header files here
+  ./lib/ # Includes source code for dynamic and static library examples and
+         # is the location you can store the built library files in for automatic linking
+
+  ./include/ # Place header files here
+
   ./src/
+    ./c # Unused in this template, but here to demonstrate a reccomended structure
     ./cpp # All files here will be compiled and linked automatically
     ./zig # Files here are compiled and linked as a library
+
   build.zig
   build.zig.zon
 ```
