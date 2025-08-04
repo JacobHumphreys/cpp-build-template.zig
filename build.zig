@@ -4,7 +4,9 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const fs = std.fs;
-const Module = std.Build.Module;
+const Build = std.Build;
+const Module = Build.Module;
+const CSourceLanguage = Module.CSourceLanguage;
 
 const zcc = @import("compile_commands");
 
@@ -61,8 +63,8 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(b.path("include"));
     debug.addIncludePath(b.path("include"));
 
-    //Build and Link zig -> c code --------------------------------
-    const zig_lib = b.addSharedLibrary(.{
+    // Build and Link zig -> c code --------------------------------
+    const zig_lib = b.addStaticLibrary(.{
         .name = "mathtest",
         .root_source_file = b.path("src/zig/mathtest.zig"),
         .target = target,
@@ -74,24 +76,34 @@ pub fn build(b: *std.Build) void {
     debug.linkLibrary(zig_lib);
     //---------------------------------------------
 
-    //Build and Link static c library --------------------------------
+    const dynamic_option = b.option(bool, "build-dynamic", "builds the static.a file") orelse false;
+    if (dynamic_option) {
+        const dynamic_lib = createDynamicLib(b, optimize, target);
+        exe.linkLibrary(dynamic_lib);
+        debug.linkLibrary(dynamic_lib);
 
-    var static_lib = b.addStaticLibrary(.{
-        .name = "example_static_lib",
-        .optimize = optimize,
-        .target = target,
-    });
-    static_lib.addCSourceFiles(.{
-        .files = getSrcFiles(b.allocator, "./lib/example-static-lib/", .c) catch |err| @panic(@errorName(err)),
-        .language = .c,
-    });
+        b.installArtifact(dynamic_lib);
+    } else {
+        exe.addLibraryPath(b.path("lib/"));
+        exe.linkSystemLibrary("example_dynamic");
+        debug.addLibraryPath(b.path("lib/"));
+        debug.linkSystemLibrary("example_dynamic");
+    }
 
-    static_lib.linkLibC();
-    exe.linkLibrary(static_lib);
-    debug.linkLibrary(static_lib);
-    zig_lib.linkLibrary(static_lib);
+    const static_option = b.option(bool, "build-static", "builds the static.a file") orelse false;
+    if (static_option) {
+        const static_lib = createStaticLib(b, optimize, target);
+        exe.linkLibrary(static_lib);
+        debug.linkLibrary(static_lib);
+        zig_lib.linkLibrary(static_lib);
 
-    //---------------------------------------------
+        b.installArtifact(static_lib);
+    } else {
+        exe.addLibraryPath(b.path("lib/"));
+        exe.linkSystemLibrary("example_static");
+        debug.addLibraryPath(b.path("lib/"));
+        debug.linkSystemLibrary("example_static");
+    }
 
     b.installArtifact(exe);
     const exe_run = b.addRunArtifact(exe);
@@ -124,16 +136,17 @@ pub fn build(b: *std.Build) void {
     );
 }
 
-pub fn getSrcFiles(alloc: std.mem.Allocator, dir_path: []const u8, extension_type: enum { c, cpp }) ![]const []const u8 {
+pub fn getSrcFiles(
+    alloc: std.mem.Allocator,
+    dir_path: []const u8,
+    file_type: CSourceLanguage,
+) ![]const []const u8 {
     const src = try fs.cwd().openDir(dir_path, .{ .iterate = true });
 
     var file_list = ArrayList([]const u8).empty;
     errdefer file_list.deinit(alloc);
 
-    const extension = switch (extension_type) {
-        .c => "c",
-        .cpp => "cpp",
-    };
+    const extension = @tagName(file_type); // Will break for obj-c and assembly
 
     var src_iterator = src.iterate();
     while (try src_iterator.next()) |entry| {
@@ -148,7 +161,7 @@ pub fn getSrcFiles(alloc: std.mem.Allocator, dir_path: []const u8, extension_typ
             },
             .directory => {
                 const path = try fs.path.join(alloc, &.{ dir_path, entry.name });
-                try file_list.appendSlice(alloc, try getSrcFiles(alloc, path, extension_type));
+                try file_list.appendSlice(alloc, try getSrcFiles(alloc, path, file_type));
             },
             else => continue,
         }
@@ -158,10 +171,7 @@ pub fn getSrcFiles(alloc: std.mem.Allocator, dir_path: []const u8, extension_typ
 }
 
 fn getClangPath(alloc: std.mem.Allocator, target: std.Target) ![]const u8 {
-    const asan_lib = if (target.os.tag == .windows)
-        "clang_rt.asan_dynamic-x86_64.dll"
-    else
-        "libclang_rt.asan-x86_64.so";
+    const asan_lib = if (target.os.tag == .windows) "clang_rt.asan_dynamic-x86_64.dll" else "libclang_rt.asan-x86_64.so";
     var child_proc = std.process.Child.init(&.{
         "clang",
         try std.mem.concat(alloc, u8, &.{ "-print-file-name=", asan_lib }),
@@ -226,18 +236,58 @@ fn getBuildFlags(
 
     if (optimize == .Debug) {
         cpp_flags = additional_flags ++ debug_flags;
-        if (exe.rootModuleTarget().os.tag == .windows) return cpp_flags;
+        if (exe.rootModuleTarget().os.tag == .windows)
+            return cpp_flags;
 
         exe.addLibraryPath(.{ .cwd_relative = try getClangPath(alloc, exe.rootModuleTarget()) });
-        const asan_lib = if (exe.rootModuleTarget().os.tag == .windows)
-            "clang_rt.asan_dynamic-x86_64" // Won't be triggered in current version
-        else
-            "clang_rt.asan-x86_64";
+        const asan_lib = if (exe.rootModuleTarget().os.tag == .windows) "clang_rt.asan_dynamic-x86_64" // Won't be triggered in current version
+            else "clang_rt.asan-x86_64";
 
         exe.linkSystemLibrary(asan_lib);
-        //exe.linkSystemLibrary("clang_rt.ubsan_standalone_cxx-x86_64");
     } else {
         cpp_flags = additional_flags;
     }
     return cpp_flags;
+}
+
+fn createDynamicLib(
+    b: *Build,
+    optimize: std.builtin.OptimizeMode,
+    target: Build.ResolvedTarget,
+) *Build.Step.Compile {
+    var dynamic_lib = b.addSharedLibrary(.{
+        .name = "example_dynamic",
+        .optimize = optimize,
+        .target = target,
+    });
+
+    dynamic_lib.addCSourceFiles(.{
+        .files = getSrcFiles(b.allocator, "./lib/example-dynamic-lib/", .cpp) catch |err|
+            @panic(@errorName(err)),
+        .language = .cpp,
+    });
+    dynamic_lib.addIncludePath(b.path("include/"));
+    dynamic_lib.linkLibCpp();
+    return dynamic_lib;
+}
+
+fn createStaticLib(
+    b: *Build,
+    optimize: std.builtin.OptimizeMode,
+    target: Build.ResolvedTarget,
+) *Build.Step.Compile {
+    var dynamic_lib = b.addStaticLibrary(.{
+        .name = "example_static",
+        .optimize = optimize,
+        .target = target,
+    });
+
+    dynamic_lib.addCSourceFiles(.{
+        .files = getSrcFiles(b.allocator, "./lib/example-static-lib/", .c) catch |err|
+            @panic(@errorName(err)),
+        .language = .c,
+    });
+    dynamic_lib.addIncludePath(b.path("include/"));
+    dynamic_lib.linkLibC();
+    return dynamic_lib;
 }

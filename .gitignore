@@ -1,6 +1,8 @@
 # zig files
 .zig-cache/
 zig-out/
+
+# clangd files
 compile_commands.json
 
 # Jetbrains IDE
