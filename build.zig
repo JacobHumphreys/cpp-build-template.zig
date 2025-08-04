@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Does not link asan or use build flags other than "std="
     const debug = b.addExecutable(.{
         .name = "debug",
         .target = target,
@@ -63,7 +64,7 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(b.path("include"));
     debug.addIncludePath(b.path("include"));
 
-    // Build and Link zig -> c code --------------------------------
+    // Build and Link zig -> c code -------------------------------------------
     const zig_lib = b.addStaticLibrary(.{
         .name = "mathtest",
         .root_source_file = b.path("src/zig/mathtest.zig"),
@@ -74,8 +75,9 @@ pub fn build(b: *std.Build) void {
     zig_lib.addIncludePath(b.path("include/"));
     exe.linkLibrary(zig_lib);
     debug.linkLibrary(zig_lib);
-    //---------------------------------------------
+    //-------------------------------------------------------------------------
 
+    // Build and/or Link Dynamic library --------------------------------------
     const dynamic_option = b.option(bool, "build-dynamic", "builds the static.a file") orelse false;
     if (dynamic_option) {
         const dynamic_lib = createDynamicLib(b, optimize, target);
@@ -89,7 +91,9 @@ pub fn build(b: *std.Build) void {
         debug.addLibraryPath(b.path("lib/"));
         debug.linkSystemLibrary("example_dynamic");
     }
+    //-------------------------------------------------------------------------
 
+    // Build and/or Link Static library --------------------------------------
     const static_option = b.option(bool, "build-static", "builds the static.a file") orelse false;
     if (static_option) {
         const static_lib = createStaticLib(b, optimize, target);
@@ -104,6 +108,7 @@ pub fn build(b: *std.Build) void {
         debug.addLibraryPath(b.path("lib/"));
         debug.linkSystemLibrary("example_static");
     }
+    //-------------------------------------------------------------------------
 
     b.installArtifact(exe);
     const exe_run = b.addRunArtifact(exe);
@@ -120,6 +125,8 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&exe_run.step);
 
     const debug_step = b.step("debug", "runs the applicaiton without any warning or san flags");
+
+    // Causes debug to only be compiled when using debug step.
     debug_step.dependOn(&b.addInstallArtifact(debug, .{}).step);
 
     var targets = ArrayList(*std.Build.Step.Compile).empty;
@@ -128,6 +135,7 @@ pub fn build(b: *std.Build) void {
     targets.append(b.allocator, exe) catch |err| @panic(@errorName(err));
     targets.append(b.allocator, debug) catch |err| @panic(@errorName(err));
 
+    // Used to generate compile_commands.json
     _ = zcc.createStep(
         b,
         "cmds",
@@ -136,6 +144,7 @@ pub fn build(b: *std.Build) void {
     );
 }
 
+/// Used to recursively fetch source files from a directory
 pub fn getSrcFiles(
     alloc: std.mem.Allocator,
     dir_path: []const u8,
@@ -170,6 +179,7 @@ pub fn getSrcFiles(
     return try file_list.toOwnedSlice(alloc);
 }
 
+/// Returns the path of the system installation of clang sanitizers
 fn getClangPath(alloc: std.mem.Allocator, target: std.Target) ![]const u8 {
     const asan_lib = if (target.os.tag == .windows) "clang_rt.asan_dynamic-x86_64.dll" else "libclang_rt.asan-x86_64.so";
     var child_proc = std.process.Child.init(&.{
@@ -227,6 +237,8 @@ const warning_flags: []const []const u8 = &.{
     "-Werror",
 };
 
+/// Returns the build flags used depending on optimization level.
+/// Will automatically link asan to exe if debug mode is used.
 fn getBuildFlags(
     alloc: Allocator,
     exe: *std.Build.Step.Compile,
@@ -250,6 +262,7 @@ fn getBuildFlags(
     return cpp_flags;
 }
 
+/// Creates the example dynamic library. Not required if not using project example libaries
 fn createDynamicLib(
     b: *Build,
     optimize: std.builtin.OptimizeMode,
@@ -271,6 +284,7 @@ fn createDynamicLib(
     return dynamic_lib;
 }
 
+/// Creates the example static library. Not required if not using project example libaries
 fn createStaticLib(
     b: *Build,
     optimize: std.builtin.OptimizeMode,
