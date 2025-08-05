@@ -14,7 +14,7 @@ int main() {
     ExampleStaticStruct ess {
         .value = 3,
     };
-    std::cout << std::format("ExampleStaticStruct: {{{} {}}}", useCLib(ess), getOne()) << std::endl;
+    std::cout << std::format("ExampleStaticStruct: {{{}, {}}}", useCLib(ess), getOne()) << std::endl;
 
     Vec2 x = { .x = 2, .y = 1 };
     x = x.add({ .x = 0, .y = 1 });
