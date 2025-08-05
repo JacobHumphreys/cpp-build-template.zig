@@ -10,6 +10,9 @@ const CSourceLanguage = Module.CSourceLanguage;
 
 const zcc = @import("compile_commands");
 
+const additional_flags: []const []const u8 = &.{"-std=c++20"};
+const debug_flags = runtime_check_flags ++ warning_flags;
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
 
@@ -28,41 +31,39 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const cpp_files = getSrcFiles(
-        b.allocator,
-        "src/cpp",
-        .cpp,
-    ) catch |err|
-        @panic(@errorName(err));
-
-    const cpp_flags = getBuildFlags(
+    const exe_flags = getBuildFlags(
         b.allocator,
         exe,
         optimize,
     ) catch |err|
         @panic(@errorName(err));
 
-    exe.addCSourceFiles(
-        Module.AddCSourceFilesOptions{
-            .files = cpp_files,
-            .flags = cpp_flags,
+    const exe_files = getCSrcFiles(
+        b.allocator,
+        .{
+            .dir_path = "src/cpp",
+            .flags = exe_flags,
             .language = .cpp,
         },
-    );
+    ) catch |err|
+        @panic(@errorName(err));
 
-    debug.addCSourceFiles(
-        Module.AddCSourceFilesOptions{
-            .files = cpp_files,
-            .flags = additional_flags,
-            .language = .cpp,
-        },
-    );
+    // Setup exe executable
+    {
+        exe.addCSourceFiles(exe_files);
+        exe.linkLibCpp(); // May need to change this to linkLibC() for your project
+        exe.addIncludePath(b.path("include"));
+    }
 
-    exe.linkLibCpp();
-    debug.linkLibCpp();
+    // Setup debug executable
+    {
+        var debug_files = exe_files;
+        debug_files.flags = additional_flags;
+        debug.addCSourceFiles(debug_files);
 
-    exe.addIncludePath(b.path("include"));
-    debug.addIncludePath(b.path("include"));
+        debug.linkLibCpp(); // May need to change this to linkLibC() for your project
+        debug.addIncludePath(b.path("include"));
+    }
 
     // Build and Link zig -> c code -------------------------------------------
     const zig_lib = b.addStaticLibrary(.{
@@ -83,7 +84,6 @@ pub fn build(b: *std.Build) void {
         const dynamic_lib = createDynamicLib(b, optimize, target);
         exe.linkLibrary(dynamic_lib);
         debug.linkLibrary(dynamic_lib);
-
         b.installArtifact(dynamic_lib);
     } else {
         exe.addLibraryPath(b.path("lib/"));
@@ -100,7 +100,6 @@ pub fn build(b: *std.Build) void {
         exe.linkLibrary(static_lib);
         debug.linkLibrary(static_lib);
         zig_lib.linkLibrary(static_lib);
-
         b.installArtifact(static_lib);
     } else {
         exe.addLibraryPath(b.path("lib/"));
@@ -145,17 +144,20 @@ pub fn build(b: *std.Build) void {
 }
 
 /// Used to recursively fetch source files from a directory
-pub fn getSrcFiles(
+pub fn getCSrcFiles(
     alloc: std.mem.Allocator,
-    dir_path: []const u8,
-    file_type: CSourceLanguage,
-) ![]const []const u8 {
-    const src = try fs.cwd().openDir(dir_path, .{ .iterate = true });
+    opts: struct {
+        dir_path: []const u8 = "./src/",
+        language: CSourceLanguage,
+        flags: []const []const u8 = &.{},
+    },
+) !Module.AddCSourceFilesOptions {
+    const src = try fs.cwd().openDir(opts.dir_path, .{ .iterate = true });
 
     var file_list = ArrayList([]const u8).empty;
     errdefer file_list.deinit(alloc);
 
-    const extension = @tagName(file_type); // Will break for obj-c and assembly
+    const extension = @tagName(opts.language); // Will break for obj-c and assembly
 
     var src_iterator = src.iterate();
     while (try src_iterator.next()) |entry| {
@@ -164,19 +166,25 @@ pub fn getSrcFiles(
                 if (!mem.endsWith(u8, entry.name, extension))
                     continue;
 
-                const path = try fs.path.join(alloc, &.{ dir_path, entry.name });
+                const path = try fs.path.join(alloc, &.{ opts.dir_path, entry.name });
 
                 try file_list.append(alloc, path);
             },
             .directory => {
-                const path = try fs.path.join(alloc, &.{ dir_path, entry.name });
-                try file_list.appendSlice(alloc, try getSrcFiles(alloc, path, file_type));
+                var dir_opts = opts;
+                dir_opts.dir_path = try fs.path.join(alloc, &.{ opts.dir_path, entry.name });
+
+                try file_list.appendSlice(alloc, (try getCSrcFiles(alloc, dir_opts)).files);
             },
             else => continue,
         }
     }
 
-    return try file_list.toOwnedSlice(alloc);
+    return Module.AddCSourceFilesOptions{
+        .files = try file_list.toOwnedSlice(alloc),
+        .language = opts.language,
+        .flags = opts.flags,
+    };
 }
 
 /// Returns the path of the system installation of clang sanitizers
@@ -205,10 +213,6 @@ fn getClangPath(alloc: std.mem.Allocator, target: std.Target) ![]const u8 {
     }
     return output;
 }
-
-const additional_flags: []const []const u8 = &.{"-std=c++20"};
-
-const debug_flags = runtime_check_flags ++ warning_flags;
 
 const runtime_check_flags: []const []const u8 = &.{
     "-fsanitize=array-bounds,null,alignment,unreachable,address,leak", // asan and leak are linux/macos only in 0.14.1
@@ -274,11 +278,17 @@ fn createDynamicLib(
         .target = target,
     });
 
-    dynamic_lib.addCSourceFiles(.{
-        .files = getSrcFiles(b.allocator, "./lib/example-dynamic-lib/", .cpp) catch |err|
+    dynamic_lib.addCSourceFiles(
+        getCSrcFiles(
+            b.allocator,
+            .{
+                .dir_path = "./lib/example-dynamic-lib/",
+                .language = .cpp,
+            },
+        ) catch |err|
             @panic(@errorName(err)),
-        .language = .cpp,
-    });
+    );
+
     dynamic_lib.addIncludePath(b.path("include/"));
     dynamic_lib.linkLibCpp();
     return dynamic_lib;
@@ -296,11 +306,14 @@ fn createStaticLib(
         .target = target,
     });
 
-    dynamic_lib.addCSourceFiles(.{
-        .files = getSrcFiles(b.allocator, "./lib/example-static-lib/", .c) catch |err|
+    dynamic_lib.addCSourceFiles(
+        getCSrcFiles(b.allocator, .{
+            .dir_path = "./lib/example-static-lib/",
+            .language = .c,
+        }) catch |err|
             @panic(@errorName(err)),
-        .language = .c,
-    });
+    );
+
     dynamic_lib.addIncludePath(b.path("include/"));
     dynamic_lib.linkLibC();
     return dynamic_lib;
