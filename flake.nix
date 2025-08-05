@@ -17,8 +17,8 @@
           name = "clang-zig-shell";
 
           buildInputs = with pkgs; [
-            clang
-            zig
+            rocmPackages.clang
+            zig_0_14
             pkg-config
             gdb
           ];
