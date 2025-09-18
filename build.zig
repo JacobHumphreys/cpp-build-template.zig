@@ -35,6 +35,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libcpp = true, // May need to change this to linkLibC() for your project
     });
+
     // Does not link asan or use build flags other than "std="
     const debug = b.addExecutable(.{
         .name = "debug",
@@ -52,7 +53,7 @@ pub fn build(b: *std.Build) void {
     const exe_files = getCSrcFiles(
         b.allocator,
         .{
-            .dir_path = "src/cpp",
+            .dir_path = "src/",
             .flags = exe_flags,
             .language = .cpp,
         },
@@ -72,68 +73,6 @@ pub fn build(b: *std.Build) void {
         debug.addCSourceFiles(debug_files);
         debug.addIncludePath(b.path("include"));
     }
-
-    // Build and Link zig -> c code -------------------------------------------
-    const zig_lib = b.addLibrary(.{
-        .name = "mathtest",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/zig/mathtest.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-        .linkage = .static,
-    });
-    zig_lib.linkLibC();
-    zig_lib.addIncludePath(b.path("include/"));
-    exe.root_module.linkLibrary(zig_lib);
-    debug.root_module.linkLibrary(zig_lib);
-    //-------------------------------------------------------------------------
-
-    // Build and/or Link Dynamic library --------------------------------------
-    const dynamic_option = b.option(bool, "build-dynamic", "builds the static.a file") orelse false;
-    if (dynamic_option) {
-        const dynamic_lib = createCLib(b, .{
-            .name = "example_dynamic",
-            .dir_path = "lib/example-dynamic-lib/",
-            .optimize = optimize,
-            .target = target,
-
-            .language = .cpp,
-            .linkage = .dynamic,
-        });
-        exe.root_module.linkLibrary(dynamic_lib);
-        debug.root_module.linkLibrary(dynamic_lib);
-        b.installArtifact(dynamic_lib);
-    } else {
-        exe.root_module.addLibraryPath(b.path("lib/"));
-        exe.root_module.linkSystemLibrary("example_dynamic", .{});
-        debug.root_module.addLibraryPath(b.path("lib/"));
-        debug.root_module.linkSystemLibrary("example_dynamic", .{});
-    }
-    //-------------------------------------------------------------------------
-
-    // Build and/or Link Static library --------------------------------------
-    const static_option = b.option(bool, "build-static", "builds the static.a file") orelse false;
-    if (static_option) {
-        const static_lib = createCLib(b, .{
-            .name = "example_static",
-            .dir_path = "lib/example-static-lib/",
-            .optimize = optimize,
-            .target = target,
-            .language = .c,
-            .linkage = .static,
-        });
-        exe.linkLibrary(static_lib);
-        debug.linkLibrary(static_lib);
-        zig_lib.linkLibrary(static_lib);
-        b.installArtifact(static_lib);
-    } else {
-        exe.addLibraryPath(b.path("lib/"));
-        exe.linkSystemLibrary("example_static");
-        debug.addLibraryPath(b.path("lib/"));
-        debug.linkSystemLibrary("example_static");
-    }
-    //-------------------------------------------------------------------------
 
     b.installArtifact(exe);
     const exe_run = b.addRunArtifact(exe);
