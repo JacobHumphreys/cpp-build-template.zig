@@ -2,7 +2,7 @@
   description = "Flake Dependencies for my C/CPP template for building with Zig. Generated with AI";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -18,7 +18,8 @@
 
           buildInputs = with pkgs; [
             rocmPackages.clang
-            zig_0_14
+            lldb_20
+            zig_0_15
             pkg-config
             gdb
           ];
