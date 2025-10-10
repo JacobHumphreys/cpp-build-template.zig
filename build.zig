@@ -97,7 +97,7 @@ pub fn build(b: *std.Build) void {
             .dir_path = "lib/example-dynamic-lib/",
             .optimize = optimize,
             .target = target,
-
+            .flags = additional_flags ++ debug_flags ++ warning_flags,
             .language = .cpp,
             .linkage = .dynamic,
         });
@@ -305,6 +305,7 @@ fn createCLib(
         linkage: builtin.LinkMode,
         optimize: builtin.OptimizeMode,
         target: Build.ResolvedTarget,
+        flags: []const []const u8 = &.{},
     },
 ) *Build.Step.Compile {
     var lib = b.addLibrary(.{
@@ -322,6 +323,7 @@ fn createCLib(
         getCSrcFiles(b.allocator, .{
             .dir_path = lib_options.dir_path,
             .language = lib_options.language,
+            .flags = lib_options.flags,
         }) catch |err|
             @panic(@errorName(err)),
     );
