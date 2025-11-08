@@ -35,7 +35,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libcpp = true, // May need to change this to linkLibC() for your project
     });
-
     // Does not link asan or use build flags other than "std="
     const debug = b.addExecutable(.{
         .name = "debug",
@@ -53,7 +52,6 @@ pub fn build(b: *std.Build) void {
     const exe_files = getCSrcFiles(
         b.allocator,
         .{
-            .dir_path = "src/",
             .flags = exe_flags,
             .language = .cpp,
         },
@@ -73,6 +71,24 @@ pub fn build(b: *std.Build) void {
         debug.addCSourceFiles(debug_files);
         debug.addIncludePath(b.path("include"));
     }
+
+    // Build and/or Link Dynamic library --------------------------------------
+    {
+        exe.root_module.addLibraryPath(b.path("lib/"));
+        exe.root_module.linkSystemLibrary("example_dynamic", .{});
+        debug.root_module.addLibraryPath(b.path("lib/"));
+        debug.root_module.linkSystemLibrary("example_dynamic", .{});
+    }
+    //-------------------------------------------------------------------------
+
+    // Build and/or Link Static library --------------------------------------
+    {
+        exe.addLibraryPath(b.path("lib/"));
+        exe.linkSystemLibrary("example_static");
+        debug.addLibraryPath(b.path("lib/"));
+        debug.linkSystemLibrary("example_static");
+    }
+    //-------------------------------------------------------------------------
 
     b.installArtifact(exe);
     const exe_run = b.addRunArtifact(exe);
@@ -244,6 +260,7 @@ fn createCLib(
         linkage: builtin.LinkMode,
         optimize: builtin.OptimizeMode,
         target: Build.ResolvedTarget,
+        flags: []const []const u8 = &.{},
     },
 ) *Build.Step.Compile {
     var lib = b.addLibrary(.{
@@ -261,6 +278,7 @@ fn createCLib(
         getCSrcFiles(b.allocator, .{
             .dir_path = lib_options.dir_path,
             .language = lib_options.language,
+            .flags = lib_options.flags,
         }) catch |err|
             @panic(@errorName(err)),
     );
