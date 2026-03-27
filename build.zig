@@ -90,16 +90,16 @@ pub fn build(b: *std.Build) void {
 
     // Setup exe executable
     {
-        exe.addCSourceFiles(exe_files);
-        exe.addIncludePath(b.path("include"));
+        exe.root_module.addCSourceFiles(exe_files);
+        exe.root_module.addIncludePath(b.path("include"));
     }
 
     // Setup debug executable
     {
         var debug_files = exe_files;
         debug_files.flags = additional_flags;
-        debug.addCSourceFiles(debug_files);
-        debug.addIncludePath(b.path("include"));
+        debug.root_module.addCSourceFiles(debug_files);
+        debug.root_module.addIncludePath(b.path("include"));
     }
 
     // Build and Link zig -> c code -------------------------------------------
@@ -111,11 +111,11 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/zig/mathtest.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
         .linkage = .static,
     });
-    zig_lib.linkLibC();
-    zig_lib.addIncludePath(b.path("include/"));
+    zig_lib.root_module.addIncludePath(b.path("include/"));
     exe.root_module.linkLibrary(zig_lib);
     debug.root_module.linkLibrary(zig_lib);
     //-------------------------------------------------------------------------
@@ -154,15 +154,15 @@ pub fn build(b: *std.Build) void {
             .language = .c,
             .linkage = .static,
         });
-        exe.linkLibrary(static_lib);
-        debug.linkLibrary(static_lib);
-        zig_lib.linkLibrary(static_lib);
+        exe.root_module.linkLibrary(static_lib);
+        debug.root_module.linkLibrary(static_lib);
+        zig_lib.root_module.linkLibrary(static_lib);
         b.installArtifact(static_lib);
     } else {
-        exe.addLibraryPath(b.path("lib/"));
-        exe.linkSystemLibrary("example_static");
-        debug.addLibraryPath(b.path("lib/"));
-        debug.linkSystemLibrary("example_static");
+        exe.root_module.addLibraryPath(b.path("lib/"));
+        exe.root_module.linkSystemLibrary("example_static", .{});
+        debug.root_module.addLibraryPath(b.path("lib/"));
+        debug.root_module.linkSystemLibrary("example_static", .{});
     }
     //-------------------------------------------------------------------------
 
@@ -218,7 +218,7 @@ fn getBuildFlags(
         const asan_lib = if (exe.rootModuleTarget().os.tag == .windows) "clang_rt.asan_dynamic-x86_64" // Won't be triggered in current version
             else "clang_rt.asan-x86_64";
 
-        exe.linkSystemLibrary(asan_lib);
+        exe.root_module.linkSystemLibrary(asan_lib, .{.needed = true});
     } else {
         flags = additional_flags;
     }
