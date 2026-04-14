@@ -2,7 +2,7 @@
   description = "Flake Dependencies for my C/CPP template for building with Zig. Generated with AI";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
   };
 
   outputs = {
