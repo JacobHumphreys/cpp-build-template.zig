@@ -53,3 +53,7 @@ compile_commands.json
 
 # nix flake files
 flake.lock
+
+# nix build files
+result
+zig-pkg/
