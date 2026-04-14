@@ -47,14 +47,16 @@
 
       buildInputs = dependencies;
 
+      env = {
+        HOME = "$PWD";
+        ZIG_GLOBAL_CACHE_DIR = "$PWD/.cache";
+        ZIG_LOCAL_CACHE_DIR = "$PWD/.zig-cache";
+      };
+
       preBuild = ''
       '';
 
       buildPhase = ''
-        export HOME=$PWD
-        export ZIG_GLOBAL_CACHE_DIR=$PWD/.cache
-        export ZIG_LOCAL_CACHE_DIR=$PWD/.zig-cache/
-
         mkdir -p $ZIG_GLOBAL_CACHE_DIR/p/zig_compile_commands-0.0.1-OZg5-ULBAABTh3NXO3WXoSUX1474ez0EouuoT2yDANhz
         cp -r ${zigCompileCommands}/* $ZIG_GLOBAL_CACHE_DIR/p/zig_compile_commands-0.0.1-OZg5-ULBAABTh3NXO3WXoSUX1474ez0EouuoT2yDANhz/
 
