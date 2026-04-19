@@ -1,6 +1,4 @@
 const std = @import("std");
-const build_helpers = @import("build/build_helpers.zig");
-
 const builtin = std.builtin;
 const ArrayList = std.ArrayList;
 const mem = std.mem;
@@ -12,6 +10,8 @@ const Module = Build.Module;
 const CSourceLanguage = Module.CSourceLanguage;
 
 const zcc = @import("compile_commands");
+
+const build_helpers = @import("build/build_helpers.zig");
 
 const additional_flags: []const []const u8 = &.{"-std=c++20"};
 const debug_flags = runtime_check_flags ++ warning_flags;
@@ -45,6 +45,8 @@ const warning_flags: []const []const u8 = &.{
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
+    var io_impl = std.Io.Threaded.init(b.allocator, .{});
+    const io = io_impl.io();
 
     const optimize = b.standardOptimizeOption(.{});
 
@@ -73,6 +75,7 @@ pub fn build(b: *std.Build) void {
 
     const exe_flags = getBuildFlags(
         b.allocator,
+        io,
         exe,
         optimize,
     ) catch |err|
@@ -80,6 +83,7 @@ pub fn build(b: *std.Build) void {
 
     const exe_files = build_helpers.getCSrcFiles(
         b.allocator,
+        io,
         .{
             .dir_path = "src/cpp",
             .flags = exe_flags,
@@ -123,7 +127,7 @@ pub fn build(b: *std.Build) void {
     // Build and/or Link Dynamic library --------------------------------------
     const dynamic_option = b.option(bool, "build-dynamic", "builds the static.a file") orelse false;
     if (dynamic_option) {
-        const dynamic_lib = build_helpers.addCLib(b, .{
+        const dynamic_lib = build_helpers.addCLib(b, io, .{
             .name = "example_dynamic",
             .dir_path = "lib/example-dynamic-lib/",
             .optimize = optimize,
@@ -146,7 +150,7 @@ pub fn build(b: *std.Build) void {
     // Build and/or Link Static library --------------------------------------
     const static_option = b.option(bool, "build-static", "builds the static.a file") orelse false;
     if (static_option) {
-        const static_lib = build_helpers.addCLib(b, .{
+        const static_lib = build_helpers.addCLib(b, io, .{
             .name = "example_static",
             .dir_path = "lib/example-static-lib/",
             .optimize = optimize,
@@ -185,6 +189,10 @@ pub fn build(b: *std.Build) void {
     // Causes debug to only be compiled when using debug step.
     debug_step.dependOn(&b.addInstallArtifact(debug, .{}).step);
 
+    // Used with zls to provide compile on save errors for zig source files
+    const exe_check = b.step("check", "compiles on save with zls for zig files");
+    exe_check.dependOn(&debug.step);
+
     var targets = ArrayList(*std.Build.Step.Compile).empty;
     defer targets.deinit(b.allocator);
 
@@ -204,6 +212,7 @@ pub fn build(b: *std.Build) void {
 /// Will automatically link asan to exe if debug mode is used.
 fn getBuildFlags(
     alloc: Allocator,
+    io: std.Io,
     exe: *std.Build.Step.Compile,
     optimize: std.builtin.OptimizeMode,
 ) ![]const []const u8 {
@@ -214,11 +223,11 @@ fn getBuildFlags(
         if (exe.rootModuleTarget().os.tag == .windows)
             return flags;
 
-        exe.root_module.addLibraryPath(.{ .cwd_relative = try build_helpers.getClangPath(alloc, exe.rootModuleTarget()) });
+        exe.root_module.addLibraryPath(.{ .cwd_relative = try build_helpers.getClangPath(alloc, io, exe.rootModuleTarget()) });
         const asan_lib = if (exe.rootModuleTarget().os.tag == .windows) "clang_rt.asan_dynamic-x86_64" // Won't be triggered in current version
             else "clang_rt.asan-x86_64";
 
-        exe.root_module.linkSystemLibrary(asan_lib, .{.needed = true});
+        exe.root_module.linkSystemLibrary(asan_lib, .{ .needed = true });
     } else {
         flags = additional_flags;
     }
